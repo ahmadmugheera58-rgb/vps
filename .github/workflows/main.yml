@@ -1,4 +1,4 @@
-name: Linux VPS Setup
+name: BugHunter-VPS-Fixed
 
 on: [push, workflow_dispatch]
 
@@ -11,75 +11,54 @@ jobs:
     - name: Install Dependencies
       run: sudo apt update && sudo apt install -y wget unzip openssh-server curl jq
 
-    - name: Download Ngrok
-      run: wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -O ngrok.zip
-
-    - name: Extract Ngrok
-      run: unzip ngrok.zip
-
-    - name: Authenticate Ngrok
-      run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-      env:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+    - name: Setup Ngrok
+      run: |
+        wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -O ngrok.zip
+        unzip ngrok.zip
+        ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
     - name: Enable Root Login
       run: |
-        # Set root password
         echo "root:toor123" | sudo chpasswd
-        
-        # Enable root login with password
         sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-        sudo sed -i 's/PermitRootLogin no/#PermitRootLogin no/' /etc/ssh/sshd_config
-        
-        # Enable password authentication
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        sudo sed -i 's/PasswordAuthentication no/#PasswordAuthentication no/' /etc/ssh/sshd_config
-        
-        # Restart SSH
         sudo systemctl restart ssh
-    - name: Create SSH Tunnel with Ngrok
+
+    - name: Start Tunnel and Extract URL
       run: |
-        # Start ngrok
+        # Start ngrok in background with a specific name
         ./ngrok tcp 22 --log=stdout > ngrok.log 2>&1 &
-        NGROK_PID=$!
         
-        sleep 8
+        echo "Waiting for Ngrok to generate public IP..."
         
-        # Get tunnel info
-        TUNNEL_INFO=""
+        # Loop until the URL is found (up to 30 seconds)
         for i in {1..15}; do
-          sleep 2
-          TUNNEL_INFO=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null || echo "")
-          [ ! -z "$TUNNEL_INFO" ] && break
-        done
-        
-        NGROK_HOST=$(echo $TUNNEL_INFO | jq -r '.tunnels[0].public_url' 2>/dev/null | sed 's/tcp:\/\///')
-        NGROK_DOMAIN=$(echo $NGROK_HOST | cut -d':' -f1)
-        NGROK_PORT=$(echo $NGROK_HOST | cut -d':' -f2)
-        
-        echo "======================================================"
-        echo "                    ROOT ACCESS                       "
-        echo "======================================================"
-        echo ""
-        echo "FULL ROOT SSH COMMAND:"
-        echo "ssh root@$NGROK_DOMAIN -p $NGROK_PORT"
-        echo ""
-        echo "ROOT CREDENTIALS:"
-        echo "Username: root"
-        echo "Password: toor123"
-        echo ""
-        echo "Host: $NGROK_DOMAIN"
-        echo "Port: $NGROK_PORT"
-        echo ""
-        echo "======================================================"
-        echo "Connect now: ssh root@$NGROK_DOMAIN -p $NGROK_PORT"
-        echo "======================================================"
-        
-        # Keep running
-        for i in {1..360}; do
-          sleep 60
-          if [ $((i % 5)) -eq 0 ]; then
-            echo "[$(date '+%H:%M:%S')] Tunnel active: ${i} minutes"
-            echo "Connect: ssh root@$NGROK_DOMAIN -p $NGROK_PORT"
+          sleep 3
+          TUNNEL_INFO=$(curl -s http://localhost:4040/api/tunnels)
+          NGROK_HOST=$(echo $TUNNEL_INFO | jq -r '.tunnels[0].public_url // empty' | sed 's/tcp:\/\///')
+          
+          if [ ! -z "$NGROK_HOST" ]; then
+            NGROK_DOMAIN=$(echo $NGROK_HOST | cut -d':' -f1)
+            NGROK_PORT=$(echo $NGROK_HOST | cut -d':' -f2)
+            break
           fi
+          echo "Still waiting..."
+        done
+
+        if [ -z "$NGROK_HOST" ]; then
+          echo "ERROR: Ngrok failed to start. Check your NGROK_AUTH_TOKEN in Secrets!"
+          exit 1
+        fi
+
+        echo "======================================================"
+        echo "                    ACCESS GRANTED                    "
+        echo "======================================================"
+        echo "COMMAND: ssh root@$NGROK_DOMAIN -p $NGROK_PORT"
+        echo "PASSWORD: toor123"
+        echo "======================================================"
+        
+        # Keep alive loop
+        while true; do
+          echo "Runner is active... $(date)"
+          sleep 300
         done
