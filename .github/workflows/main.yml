@@ -1,5 +1,4 @@
-name: BugHunter-VPS-Fixed
-
+name: BugHunter-VPS-V3
 on: [push, workflow_dispatch]
 
 jobs:
@@ -13,52 +12,38 @@ jobs:
 
     - name: Setup Ngrok
       run: |
-        wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -O ngrok.zip
-        unzip ngrok.zip
-        ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -O ngrok.zip
+        unzip -o ngrok.zip
+        chmod +x ngrok
+        # If this line fails, your Secret is likely missing in GitHub
+        ./ngrok config add-authtoken "${{ secrets.NGROK_AUTH_TOKEN }}"
 
-    - name: Enable Root Login
+    - name: SSH Config
       run: |
         echo "root:toor123" | sudo chpasswd
         sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
         sudo systemctl restart ssh
 
-    - name: Start Tunnel and Extract URL
+    - name: Start Tunnel
       run: |
-        # Start ngrok in background with a specific name
         ./ngrok tcp 22 --log=stdout > ngrok.log 2>&1 &
+        sleep 15
         
-        echo "Waiting for Ngrok to generate public IP..."
+        # Grab the URL directly from the local Ngrok API
+        FULL_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
         
-        # Loop until the URL is found (up to 30 seconds)
-        for i in {1..15}; do
-          sleep 3
-          TUNNEL_INFO=$(curl -s http://localhost:4040/api/tunnels)
-          NGROK_HOST=$(echo $TUNNEL_INFO | jq -r '.tunnels[0].public_url // empty' | sed 's/tcp:\/\///')
-          
-          if [ ! -z "$NGROK_HOST" ]; then
-            NGROK_DOMAIN=$(echo $NGROK_HOST | cut -d':' -f1)
-            NGROK_PORT=$(echo $NGROK_HOST | cut -d':' -f2)
-            break
-          fi
-          echo "Still waiting..."
-        done
-
-        if [ -z "$NGROK_HOST" ]; then
-          echo "ERROR: Ngrok failed to start. Check your NGROK_AUTH_TOKEN in Secrets!"
+        if [ "$FULL_URL" = "null" ]; then
+          echo "ERROR: Tunnel not found. Log dump:"
+          cat ngrok.log
           exit 1
         fi
 
-        echo "======================================================"
-        echo "                    ACCESS GRANTED                    "
-        echo "======================================================"
-        echo "COMMAND: ssh root@$NGROK_DOMAIN -p $NGROK_PORT"
-        echo "PASSWORD: toor123"
-        echo "======================================================"
+        echo "=========================================="
+        echo "SUCCESS! CONNECT COMMAND:"
+        echo "ssh root@${FULL_URL//tcp:\/\//} "
+        echo "Password: toor123"
+        echo "=========================================="
         
-        # Keep alive loop
-        while true; do
-          echo "Runner is active... $(date)"
-          sleep 300
-        done
+        # Prevent the runner from exiting
+        while true; do sleep 60; done
