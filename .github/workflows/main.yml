@@ -1,4 +1,4 @@
-name: BugHunter-VPS-V3
+name: BugHunter-VPS-V4
 on: [push, workflow_dispatch]
 
 jobs:
@@ -7,43 +7,55 @@ jobs:
     timeout-minutes: 360
     
     steps:
-    - name: Install Dependencies
+    - name: Setup Environment
       run: sudo apt update && sudo apt install -y wget unzip openssh-server curl jq
 
-    - name: Setup Ngrok
+    - name: Auth Ngrok
       run: |
         wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -O ngrok.zip
         unzip -o ngrok.zip
         chmod +x ngrok
-        # If this line fails, your Secret is likely missing in GitHub
         ./ngrok config add-authtoken "${{ secrets.NGROK_AUTH_TOKEN }}"
 
-    - name: SSH Config
+    - name: SSH Configuration
       run: |
         echo "root:toor123" | sudo chpasswd
         sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
         sudo systemctl restart ssh
 
-    - name: Start Tunnel
+    - name: Start Tunnel & Wait for URL
       run: |
+        # Start ngrok in background
         ./ngrok tcp 22 --log=stdout > ngrok.log 2>&1 &
-        sleep 15
         
-        # Grab the URL directly from the local Ngrok API
-        FULL_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "Waiting for Ngrok to give us a public IP..."
         
-        if [ "$FULL_URL" = "null" ]; then
-          echo "ERROR: Tunnel not found. Log dump:"
-          cat ngrok.log
-          exit 1
-        fi
-
-        echo "=========================================="
-        echo "SUCCESS! CONNECT COMMAND:"
-        echo "ssh root@${FULL_URL//tcp:\/\//} "
-        echo "Password: toor123"
-        echo "=========================================="
+        # PRO LOOP: Checks every 2 seconds for up to 60 seconds
+        for i in {1..30}; do
+          sleep 2
+          # Extract URL from local ngrok API
+          RAW_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty')
+          
+          if [[ "$RAW_URL" == tcp* ]]; then
+            CLEAN_URL=${RAW_URL//tcp:\/\//}
+            echo "=========================================="
+            echo "       SUCCESS! VPS IS READY              "
+            echo "=========================================="
+            echo "COMMAND: ssh root@${CLEAN_URL//:/ -p }"
+            echo "PASSWORD: toor123"
+            echo "=========================================="
+            break
+          fi
+          
+          if [ $i -eq 30 ]; then
+            echo "ERROR: Ngrok failed to start in 60 seconds."
+            cat ngrok.log
+            exit 1
+          fi
+          echo "Still waiting... (Attempt $i)"
+        done
         
-        # Prevent the runner from exiting
-        while true; do sleep 60; done
+        # Keep the runner alive
+        while true; do sleep 300; done
+      
