@@ -1,12 +1,11 @@
-name: BugHunter-VPS-V5
-
+name: BugHunter-VPS-Final-Fix
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    
+
     steps:
     - name: Install Dependencies
       run: sudo apt update && sudo apt install -y wget unzip openssh-server curl jq
@@ -20,41 +19,39 @@ jobs:
 
     - name: Enable Root SSH
       run: |
-        # Set root password to toor123
+        # Use 'root' instead of 'runneradmin'
         echo "root:toor123" | sudo chpasswd
-        
-        # Configure SSH for root login
         sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
         sudo systemctl restart ssh
 
-    - name: Start Tunnel & Print Access
+    - name: Start Tunnel & Debug
       run: |
-        # Start ngrok in background (using &) so it doesn't block the script
+        # 1. Start Ngrok
         ./ngrok tcp 22 --log=stdout > ngrok.log 2>&1 &
-        
-        echo "Generating your SSH Link..."
         sleep 10
-        
-        # Get the URL from the local Ngrok API
-        for i in {1..10}; do
-          FULL_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty')
-          if [ ! -z "$FULL_URL" ]; then
-            CLEAN_URL=${FULL_URL//tcp:\/\//}
-            echo "======================================================"
-            echo "            VPS READY (6 HOURS REMAINING)            "
-            echo "======================================================"
-            echo "COMMAND: ssh root@${CLEAN_URL//:/ -p }"
-            echo "PASSWORD: toor123"
-            echo "======================================================"
-            break
-          fi
-          echo "Waiting for IP... ($i)"
-          sleep 5
-        done
-        
-        # Keep the session alive
-        while true; do
-          sleep 300
-          echo "Keep-alive: $(date)"
-        done
+
+        # 2. Check if tunnel is actually up
+        RAW_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty')
+
+        if [ -z "$RAW_URL" ] || [ "$RAW_URL" = "null" ]; then
+          echo "======================================================"
+          echo "❌ ERROR: NGROK FAILED TO START"
+          echo "REASON FROM LOGS:"
+          cat ngrok.log
+          echo "======================================================"
+          exit 1
+        fi
+
+        # 3. Print the successful connection info
+        CLEAN_URL=${RAW_URL//tcp:\/\//}
+        echo "======================================================"
+        echo "✅ VPS READY (Peshawar Hunter Edition)"
+        echo "======================================================"
+        echo "COMMAND: ssh root@${CLEAN_URL//:/ -p }"
+        echo "PASSWORD: toor123"
+        echo "======================================================"
+
+        # Keep alive
+        while true; do sleep 300; done
+      
