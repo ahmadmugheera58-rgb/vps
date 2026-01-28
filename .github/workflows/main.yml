@@ -1,20 +1,21 @@
-- name: Start Tunnel (No Card Required)
+name: BugHunter-VPS-Tmate
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup Tmate Session
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-user: false # Allows you to connect without SSH keys
+
+    - name: Keep Alive
       run: |
-        # Use localhost.run to create a tunnel without an account/card
-        # We redirect the output to a file to catch the URL
-        ssh -o StrictHostKeyChecking=no -R 80:localhost:22 nokey@localhost.run > tunnel.log 2>&1 &
-        
-        echo "Waiting for tunnel to initialize..."
-        sleep 10
-        
-        # Print the log so you can see the connection string
-        cat tunnel.log
-        
-        echo "======================================================"
-        echo "✅ VPS READY"
-        echo "Look at the line above starting with 'tunneled with' "
-        echo "It will look like: ssh -p 443 root@xyz.lhr.life"
-        echo "PASSWORD: toor123"
-        echo "======================================================"
-        
+        echo "VPS is running..."
         while true; do sleep 300; done
