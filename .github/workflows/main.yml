@@ -1,61 +1,35 @@
-name: BugHunter-VPS-V4
+name: Linux VPS Setup
+
 on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-    
+
     steps:
-    - name: Setup Environment
-      run: sudo apt update && sudo apt install -y wget unzip openssh-server curl jq
+    - name: Install Dependencies
+      run: sudo apt update && sudo apt install -y wget unzip openssh-server
 
-    - name: Auth Ngrok
-      run: |
-        wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -O ngrok.zip
-        unzip -o ngrok.zip
-        chmod +x ngrok
-        ./ngrok config add-authtoken "${{ secrets.NGROK_AUTH_TOKEN }}"
+    - name: Download Ngrok
+      run: wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -O ngrok.zip
 
-    - name: SSH Configuration
-      run: |
-        echo "root:toor123" | sudo chpasswd
-        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-        sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        sudo systemctl restart ssh
+    - name: Extract Ngrok
+      run: unzip ngrok.zip
 
-    - name: Start Tunnel & Wait for URL
-      run: |
-        # Start ngrok in background
-        ./ngrok tcp 22 --log=stdout > ngrok.log 2>&1 &
-        
-        echo "Waiting for Ngrok to give us a public IP..."
-        
-        # PRO LOOP: Checks every 2 seconds for up to 60 seconds
-        for i in {1..30}; do
-          sleep 2
-          # Extract URL from local ngrok API
-          RAW_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty')
-          
-          if [[ "$RAW_URL" == tcp* ]]; then
-            CLEAN_URL=${RAW_URL//tcp:\/\//}
-            echo "=========================================="
-            echo "       SUCCESS! VPS IS READY              "
-            echo "=========================================="
-            echo "COMMAND: ssh root@${CLEAN_URL//:/ -p }"
-            echo "PASSWORD: toor123"
-            echo "=========================================="
-            break
-          fi
-          
-          if [ $i -eq 30 ]; then
-            echo "ERROR: Ngrok failed to start in 60 seconds."
-            cat ngrok.log
-            exit 1
-          fi
-          echo "Still waiting... (Attempt $i)"
-        done
-        
-        # Keep the runner alive
-        while true; do sleep 300; done
-      
+    - name: Authenticate Ngrok
+      run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+      env:
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+
+    - name: Enable SSH Server
+      run: sudo systemctl start ssh && sudo systemctl enable ssh
+
+    - name: Set Default Password (Auto)
+      run: echo "runneradmin:P@ssw0rd!" | sudo chpasswd
+
+    - name: Allow SSH Login
+      run: sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && sudo systemctl restart ssh
+
+    - name: Create SSH Tunnel with Ngrok
+      run: ./ngrok tcp 22
+    
