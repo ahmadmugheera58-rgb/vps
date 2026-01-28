@@ -1,4 +1,4 @@
-name: BugHunter-VPS-Tmate
+name: BugHunter-Cloudflare
 on: [push, workflow_dispatch]
 
 jobs:
@@ -7,15 +7,31 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-
-    - name: Setup Tmate Session
-      uses: mxschmitt/action-tmate@v3
-      with:
-        limit-access-to-user: false # Allows you to connect without SSH keys
-
-    - name: Keep Alive
+    - name: Install Cloudflared & SSH
       run: |
-        echo "VPS is running..."
+        sudo apt update && sudo apt install -y wget openssh-server
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        sudo dpkg -i cloudflared-linux-amd64.deb
+        
+    - name: Configure Root Access
+      run: |
+        echo "root:toor123" | sudo chpasswd
+        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo systemctl restart ssh
+
+    - name: Start Cloudflare Tunnel
+      run: |
+        # This creates a tunnel and prints the random URL to the logs
+        cloudflared tunnel --url ssh://localhost:22 > cf.log 2>&1 &
+        sleep 10
+        echo "======================================================"
+        echo "           CLOUDFLARE SSH ACCESS                      "
+        echo "======================================================"
+        grep -o 'https://[-a-z0-9.]*trycloudflare.com' cf.log | head -n 1
+        echo "======================================================"
+        echo "PASSWORD: toor123"
+        echo "======================================================"
+        
+        # Keep alive
         while true; do sleep 300; done
