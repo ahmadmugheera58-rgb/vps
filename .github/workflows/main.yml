@@ -1,4 +1,4 @@
-name: BugHunter-SSH
+name: BugHunter-Serveo
 on: [push, workflow_dispatch]
 
 jobs:
@@ -7,50 +7,40 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Install SSH & Dependencies
+    - name: Setup SSH
       run: |
-        sudo apt update && sudo apt install -y openssh-server sshpass
-        
-    - name: Configure Root Access
-      run: |
+        sudo apt update && sudo apt install -y openssh-server
         echo "root:toor123" | sudo chpasswd
         sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
         sudo systemctl restart ssh
         
-    - name: Start Pinggy Tunnel
+    - name: Start Serveo Tunnel
       run: |
         echo "======================================================"
         echo "         🔥 BUG HUNTER SSH ACCESS 🔥"
         echo "======================================================"
         echo ""
-        echo "📡 Starting Pinggy tunnel (better than Cloudflare for GH Actions)..."
+        
+        # Install ssh client and create tunnel
+        ssh -o StrictHostKeyChecking=no -R 80:localhost:22 serveo.net > serveo.log 2>&1 &
+        
+        echo "⏳ Waiting for tunnel..."
+        sleep 10
+        
+        echo "📡 Check your URL at: https://serveo.net"
         echo ""
-        
-        # Install sshpass and start tunnel
-        ssh -o StrictHostKeyChecking=no -p 443 -R0:localhost:22 -o ServerAliveInterval=30 qr@a.pinggy.io > pinggy.log 2>&1 &
-        
-        sleep 5
-        
-        # Get URL from log
-        URL=$(grep -o 'https://.*\.pinggy\.link' pinggy.log | head -1)
-        
-        if [ ! -z "$URL" ]; then
-          echo "✅ Tunnel URL: $URL"
-          echo ""
-          echo "📡 SSH Command:"
-          echo "ssh -p \$(echo $URL | cut -d: -f2 | cut -d/ -f3) root@localhost -o ProxyCommand=\"ssh -p 443 -W %h:%p qr@a.pinggy.io\""
-          echo ""
-          echo "🔑 Password: toor123"
-        else
-          echo "⚠️  Tunnel logs:"
-          cat pinggy.log
-        fi
-        
+        echo "💻 SSH Command:"
+        echo "ssh -J serveo.net root@localhost"
+        echo ""
+        echo "🔑 Password: toor123"
         echo "======================================================"
+        
+        # Show logs
+        cat serveo.log
         
         # Keep alive
         while true; do
           sleep 300
-          echo "[$(date '+%H:%M:%S')] Session active"
+          echo "[$(date '+%H:%M:%S')] Session active - Check https://serveo.net for your URL"
         done
