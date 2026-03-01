@@ -1,4 +1,4 @@
-name: BugHunter-Netbird
+name: BugHunter-Wush
 on: [push, workflow_dispatch]
 
 jobs:
@@ -7,33 +7,53 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Setup SSH
+    - name: Setup SSH with Custom Password
       run: |
         echo "root:toor123" | sudo chpasswd
         sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
         sudo systemctl restart ssh
+        echo "✅ SSH configured with password: toor123"
         
-    - name: Install Netbird
+    - name: Install Wush
       run: |
-        curl -sSL https://pkgs.netbird.io/install.sh | sh
+        curl -fsSL https://wush.dev/install.sh | sh
+        sudo mv wush /usr/local/bin/
         
-    - name: Connect to Netbird
-      env:
-        NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}  # Get from https://app.netbird.io
+    - name: Start Wush Tunnel
       run: |
-        sudo netbird up --setup-key $NETBIRD_SETUP_KEY
-        IP=$(ip addr show wt0 | grep inet | awk '{print $2}' | cut -d/ -f1)
+        echo "======================================================"
+        echo "         🔥 BUG HUNTER SSH (WUSH) 🔥"
+        echo "======================================================"
+        echo ""
+        echo "📡 WUSH AUTHENTICATION KEY:"
+        echo ""
         
-        echo "======================================================"
-        echo "         🔥 BUG HUNTER SSH (Netbird) 🔥"
-        echo "======================================================"
-        echo ""
-        echo "📡 Runner Netbird IP: $IP"
-        echo ""
-        echo "💻 On your local machine (after installing Netbird):"
-        echo "ssh root@$IP"
-        echo ""
-        echo "🔑 Password: toor123"
-        echo "======================================================"
+        # Start wush serving SSH port
+        wush serve :22 &
+        WUSH_PID=$!
         
-        while true; do sleep 300; done
+        # Give it time to generate the key
+        sleep 5
+        
+        # Get the auth key
+        wush auth show 2>/dev/null || echo "Waiting for auth key..."
+        
+        echo ""
+        echo "======================================================"
+        echo "🔑 SSH Password: toor123"
+        echo "======================================================"
+        echo ""
+        echo "📝 INSTRUCTIONS FOR WINDOWS:"
+        echo "──────────────────────────────────────"
+        echo "1. On your Windows machine, open Terminal"
+        echo "2. Run: wush ssh"
+        echo "3. Paste the AUTHENTICATION KEY above"
+        echo "4. When prompted for password, enter: toor123"
+        echo "──────────────────────────────────────"
+        
+        # Keep the session alive and show status
+        while true; do
+          sleep 60
+          echo "[$(date '+%H:%M:%S')] Session active - Auth key still valid"
+        done
