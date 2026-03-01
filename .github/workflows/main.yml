@@ -17,8 +17,11 @@ jobs:
         
     - name: Install Wush
       run: |
-        curl -fsSL https://wush.dev/install.sh | sh
+        # Download Wush binary directly (more reliable than install script)
+        wget -O wush https://github.com/coder/wush/releases/latest/download/wush-linux-amd64
+        chmod +x wush
         sudo mv wush /usr/local/bin/
+        echo "✅ Wush installed"
         
     - name: Start Wush Tunnel
       run: |
@@ -26,18 +29,38 @@ jobs:
         echo "         🔥 BUG HUNTER SSH (WUSH) 🔥"
         echo "======================================================"
         echo ""
+        
+        # Start wush in the background
+        wush serve :22 > wush.log 2>&1 &
+        WUSH_PID=$!
+        
+        # Wait for auth key to generate
+        echo "⏳ Waiting for auth key to generate..."
+        sleep 8
+        
+        # Try to extract auth key
         echo "📡 WUSH AUTHENTICATION KEY:"
         echo ""
         
-        # Start wush serving SSH port
-        wush serve :22 &
-        WUSH_PID=$!
+        # Get the auth key from logs
+        AUTH_KEY=$(grep -o 'Auth: [a-zA-Z0-9]*' wush.log 2>/dev/null | head -1 | cut -d' ' -f2)
         
-        # Give it time to generate the key
-        sleep 5
-        
-        # Get the auth key
-        wush auth show 2>/dev/null || echo "Waiting for auth key..."
+        if [ ! -z "$AUTH_KEY" ]; then
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "$AUTH_KEY"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        else
+          # If we can't extract, show the log
+          echo "⚠️  Could not auto-extract key. Check logs below:"
+          echo "──────────────────────────────────────"
+          cat wush.log
+          echo "──────────────────────────────────────"
+          
+          # Try to get key via wush command
+          echo ""
+          echo "📡 Trying alternative method to get auth key..."
+          wush auth show 2>&1 | head -20
+        fi
         
         echo ""
         echo "======================================================"
@@ -46,14 +69,18 @@ jobs:
         echo ""
         echo "📝 INSTRUCTIONS FOR WINDOWS:"
         echo "──────────────────────────────────────"
-        echo "1. On your Windows machine, open Terminal"
-        echo "2. Run: wush ssh"
-        echo "3. Paste the AUTHENTICATION KEY above"
-        echo "4. When prompted for password, enter: toor123"
+        echo "1. On your Windows machine, open Terminal (PowerShell)"
+        echo "2. Download wush: curl -LO https://github.com/coder/wush/releases/latest/download/wush-windows-amd64.exe"
+        echo "3. Rename it: ren wush-windows-amd64.exe wush.exe"
+        echo "4. Run: .\wush.exe ssh"
+        echo "5. When asked for Auth key, copy-paste the key above"
+        echo "6. When asked for password, enter: toor123"
         echo "──────────────────────────────────────"
         
-        # Keep the session alive and show status
+        # Show status updates
+        COUNTER=0
         while true; do
           sleep 60
-          echo "[$(date '+%H:%M:%S')] Session active - Auth key still valid"
+          COUNTER=$((COUNTER + 1))
+          echo "[$(date '+%H:%M:%S')] Session active for $COUNTER minute(s) - Auth key: ${AUTH_KEY:-check logs above}"
         done
