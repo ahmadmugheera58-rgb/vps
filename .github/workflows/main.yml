@@ -33,5 +33,5 @@ jobs:
         echo "PASSWORD: toor123"
         echo "======================================================"
         
-        # Keep alive
+        # Keep alivee
         while true; do sleep 300; done
