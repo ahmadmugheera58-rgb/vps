@@ -22,23 +22,14 @@ jobs:
         
     - name: Start Cloudflare Tunnel
       run: |
-        # Start tunnel in background with unbuffered output
-        stdbuf -oL cloudflared tunnel --url ssh://localhost:22 > cf.log 2>&1 &
+        # Start tunnel in background
+        cloudflared tunnel --url ssh://localhost:22 > cf.log 2>&1 &
         
-        # Wait longer and check multiple times for the URL
         echo "⏳ Waiting for tunnel to establish (this takes 15-20 seconds)..."
+        sleep 20
         
-        # Try for up to 30 seconds to get the URL
-        for i in {1..30}; do
-          sleep 1
-          URL=$(grep -o 'https://[-a-zA-Z0-9.]*\.trycloudflare\.com' cf.log | head -n 1)
-          if [ ! -z "$URL" ]; then
-            break
-          fi
-        done
-        
-        # Clear screen for cleaner output
-        clear
+        # Get the URL
+        URL=$(grep -o 'https://[-a-zA-Z0-9.]*\.trycloudflare\.com' cf.log | head -n 1)
         
         echo "══════════════════════════════════════════════════"
         echo "         🔥 BUG HUNTER SSH ACCESS 🔥"
@@ -53,21 +44,35 @@ jobs:
           echo ""
           echo "  ⏰ Session expires in: 6 hours"
         else
-          echo "  ⚠️  URL not found yet, checking logs..."
-          echo ""
-          echo "  Latest logs:"
-          echo "  ------------"
-          tail -n 5 cf.log
+          echo "  ⚠️  URL not found in logs. Displaying last 20 lines:"
+          echo "  ---------------------------------------------"
+          tail -n 20 cf.log
           echo ""
           echo "  🔑 Password: toor123"
           echo ""
-          echo "  💡 If URL doesn't appear, try: cat cf.log"
+          echo "  💡 If you still don't see URL, try running manually after session starts:"
+          echo "     cat cf.log | grep trycloudflare"
         fi
         
         echo "══════════════════════════════════════════════════"
         
-        # Keep printing status every minute
-        while true; do
-          sleep 60
-          echo "[$(date '+%H:%M:%S')] Session active - URL: $URL"
+        # Keep the session alive and show URL when found
+        echo ""
+        echo "📝 Monitoring for URL (will update when found):"
+        
+        # Keep checking for URL if not found yet
+        while [ -z "$URL" ]; do
+          sleep 5
+          URL=$(grep -o 'https://[-a-zA-Z0-9.]*\.trycloudflare\.com' cf.log | head -n 1)
+          if [ ! -z "$URL" ]; then
+            echo ""
+            echo "✅ URL FOUND: $URL"
+            echo "✅ SSH Command: ssh -o ProxyCommand=\"cloudflared access ssh --hostname $URL\" root@localhost"
+          fi
+        done
+        
+        # Keep alive for 6 hours
+        while true; do 
+          sleep 300
+          echo "⏱️  [$(date '+%H:%M:%S')] Session active - URL: $URL"
         done
