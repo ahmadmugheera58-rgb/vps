@@ -1,91 +1,104 @@
+---
 name: SSH Server with Cloudflare Tunnel
-
 on:
-  workflow_dispatch:  # Manual trigger only
-
+  workflow_dispatch: null
 jobs:
   ssh-server:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours max
-    
+    timeout-minutes: 360
     steps:
-    - name: Set root password
-      run: |
-        # Set your custom password
-        echo "root:${{ secrets.SSH_PASSWORD }}" | sudo chpasswd
-        echo "✅ Password configured successfully"
-    
-    - name: Configure SSH
-      run: |
-        # Allow root login and password authentication
-        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-        sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        
-        # Restart SSH service
-        sudo service ssh restart
-        echo "✅ SSH server configured and running"
-    
-    - name: Get system info
-      run: |
-        echo "📋 System Information:"
-        echo "----------------------"
-        echo "OS: $(lsb_release -d | cut -f2)"
-        echo "Kernel: $(uname -r)"
-        echo "CPU: $(nproc) cores"
-        echo "RAM: $(free -h | awk '/^Mem:/ {print $2}')"
-        echo "IP: $(hostname -I | awk '{print $1}')"
-        echo "----------------------"
-    
-    - name: Download Cloudflared
-      run: |
-        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-        sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
-        sudo chmod +x /usr/local/bin/cloudflared
-        echo "✅ Cloudflared downloaded"
-    
-    - name: Start Cloudflare Tunnel
-      run: |
-        echo "🚀 Starting Cloudflare Tunnel..."
-        echo "⏳ Please wait 10-15 seconds for the tunnel to establish"
-        echo ""
-        
-        # Start tunnel in background and capture output
-        cloudflared tunnel --url ssh://localhost:22 > tunnel.log 2>&1 &
-        
-        # Wait for tunnel to establish
-        sleep 12
-        
-        # Extract and display the URL cleanly
-        TUNNEL_URL=$(grep -oP 'https?://[a-zA-Z0-9.-]+\.trycloudflare\.com' tunnel.log | head -1)
-        
-        if [ -n "$TUNNEL_URL" ]; then
+      - name: Set root password
+        run: |
+          # Set your custom password
+          echo "root:${{ secrets.SSH_PASSWORD }}" | sudo chpasswd
+          echo "✅ Password configured successfully"
+      - name: Configure SSH
+        run: >
+          # Allow root login and password authentication
+
+          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+
+          # Restart SSH service
+
+          sudo service ssh restart
+
+          echo "✅ SSH server configured and running"
+      - name: Get system info
+        run: |
+          echo "📋 System Information:"
+          echo "----------------------"
+          echo "OS: $(lsb_release -d | cut -f2)"
+          echo "Kernel: $(uname -r)"
+          echo "CPU: $(nproc) cores"
+          echo "RAM: $(free -h | awk '/^Mem:/ {print $2}')"
+          echo "IP: $(hostname -I | awk '{print $1}')"
+          echo "----------------------"
+      - name: Download Cloudflared
+        run: >
+          wget -q
+          https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+
+          sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
+
+          sudo chmod +x /usr/local/bin/cloudflared
+
+          echo "✅ Cloudflared downloaded"
+      - name: Start Cloudflare Tunnel
+        run: >
+          echo "🚀 Starting Cloudflare Tunnel..."
+
+          echo "⏳ Please wait 10-15 seconds for the tunnel to establish"
+
           echo ""
-          echo "══════════════════════════════════════════════"
-          echo "   ✅ TUNNEL SUCCESSFULLY CREATED"
-          echo "══════════════════════════════════════════════"
-          echo ""
-          echo "   📡 Your SSH Connection Command:"
-          echo ""
-          echo "   ssh -o ProxyCommand=\"cloudflared access ssh --hostname $TUNNEL_URL\" root@localhost"
-          echo ""
-          echo "   🔑 Password: ${{ secrets.SSH_PASSWORD }}"
-          echo ""
-          echo "══════════════════════════════════════════════"
-          echo ""
-          echo "📝 Instructions:"
-          echo "1. Copy the SSH command above"
-          echo "2. Make sure you have cloudflared installed locally"
-          echo "3. Run the command and enter password when prompted"
-          echo ""
-          
-          # Keep the URL visible by printing to logs periodically
-          while true; do
-            sleep 60
-            echo "⏱️  Session active - Tunnel URL: $TUNNEL_URL"
-          done
-        else
-          echo "❌ Failed to get tunnel URL"
-          cat tunnel.log
-          exit 1
-        fi
+
+
+          # Start tunnel in background and capture output
+
+          cloudflared tunnel --url ssh://localhost:22 > tunnel.log 2>&1 &
+
+
+          # Wait for tunnel to establish
+
+          sleep 12
+
+
+          # Extract and display the URL cleanly
+
+          TUNNEL_URL=$(grep -oP 'https?://[a-zA-Z0-9.-]+\.trycloudflare\.com' tunnel.log | head -1)
+
+
+          if [ -n "$TUNNEL_URL" ]; then
+            echo ""
+            echo "══════════════════════════════════════════════"
+            echo "   ✅ TUNNEL SUCCESSFULLY CREATED"
+            echo "══════════════════════════════════════════════"
+            echo ""
+            echo "   📡 Your SSH Connection Command:"
+            echo ""
+            echo "   ssh -o ProxyCommand=\"cloudflared access ssh --hostname $TUNNEL_URL\" root@localhost"
+            echo ""
+            echo "   🔑 Password: ${{ secrets.SSH_PASSWORD }}"
+            echo ""
+            echo "══════════════════════════════════════════════"
+            echo ""
+            echo "📝 Instructions:"
+            echo "1. Copy the SSH command above"
+            echo "2. Make sure you have cloudflared installed locally"
+            echo "3. Run the command and enter password when prompted"
+            echo ""
+            
+            # Keep the URL visible by printing to logs periodically
+            while true; do
+              sleep 60
+              echo "⏱️  Session active - Tunnel URL: $TUNNEL_URL"
+            done
+          else
+            echo "❌ Failed to get tunnel URL"
+            cat tunnel.log
+            exit 1
+          fi
