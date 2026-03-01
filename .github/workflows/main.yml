@@ -7,13 +7,22 @@ jobs:
     timeout-minutes: 360
 
     steps:
-    - name: Setup SSH with Custom Password
+    - name: Setup SSH with Custom Password & Direct Root Login
       run: |
+        # Set root password
         echo "root:toor123" | sudo chpasswd
+        
+        # Configure SSH for direct root login
         sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/#PermitRootLogin yes/PermitRootLogin yes/' /etc/ssh/sshd_config
         sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/#ChallengeResponseAuthentication yes/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
+        
+        # Restart SSH service
         sudo systemctl restart ssh
-        echo "✅ SSH configured with password: toor123"
+        echo "✅ SSH configured with direct root login and password: toor123"
         
     - name: Install Wush
       run: |
@@ -41,7 +50,7 @@ jobs:
         
         # Wait for auth key to appear
         echo "⏳ Waiting for authentication key..."
-        sleep 5
+        sleep 8
         
         # Try to extract auth key from log
         AUTH_KEY=$(grep -o '[a-zA-Z0-9]\{50,\}' wush_output.log 2>/dev/null | head -1)
@@ -51,10 +60,10 @@ jobs:
           echo "🔑 YOUR AUTHENTICATION KEY:"
           echo "$AUTH_KEY"
         else
-          echo "📡 WUSH SERVER RUNNING - AUTH KEY WILL APPEAR BELOW:"
+          echo "📡 WUSH SERVER RUNNING - CHECK BELOW FOR AUTH KEY:"
           echo ""
           # Show the last few lines of output which should contain the key
-          tail -n 10 wush_output.log
+          tail -n 15 wush_output.log
         fi
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         
@@ -63,8 +72,8 @@ jobs:
         echo "🔑 SSH Password: toor123"
         echo "======================================================"
         echo ""
-        echo "📝 INSTRUCTIONS FOR WINDOWS:"
-        echo "──────────────────────────────────────"
+        echo "📝 INSTRUCTIONS FOR WINDOWS (DIRECT ROOT LOGIN):"
+        echo "──────────────────────────────────────────────────"
         echo "1. Download wush for Windows:"
         echo "   curl -LO https://github.com/coder/wush/releases/download/v0.4.1/wush_0.4.1_windows_amd64.exe"
         echo "   ren wush_0.4.1_windows_amd64.exe wush.exe"
@@ -73,11 +82,16 @@ jobs:
         echo "   .\wush.exe ssh"
         echo ""
         echo "3. When prompted for password, enter: toor123"
-        echo "──────────────────────────────────────"
+        echo "   (You'll be automatically logged in as root)"
+        echo "──────────────────────────────────────────────────"
+        echo ""
+        echo "📌 Once connected, you'll be at the root prompt:"
+        echo "   root@fv-azure:~#"
+        echo ""
         
         # Monitor and display auth key when it appears
-        echo ""
         echo "📡 Monitoring for auth key (will update when found):"
+        echo ""
         
         while true; do
           sleep 10
@@ -87,11 +101,15 @@ jobs:
             if [ ! -z "$NEW_KEY" ]; then
               AUTH_KEY=$NEW_KEY
               echo ""
-              echo "✅ AUTH KEY FOUND: $AUTH_KEY"
+              echo "══════════════════════════════════════════════════"
+              echo "✅ AUTH KEY FOUND!"
+              echo "══════════════════════════════════════════════════"
+              echo "$AUTH_KEY"
+              echo "══════════════════════════════════════════════════"
               echo ""
             fi
           fi
           
           # Show running message
-          echo "[$(date '+%H:%M:%S')] Session active - Auth key: ${AUTH_KEY:-waiting...}"
+          echo "[$(date '+%H:%M:%S')] Session active - Auth key: ${AUTH_KEY:0:20}... (full key above)"
         done
