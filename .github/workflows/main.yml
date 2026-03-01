@@ -1,37 +1,34 @@
-name: BugHunter-Cloudflare
-on: [push, workflow_dispatch]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-
-    steps:
-    - name: Install Cloudflared & SSH
+- name: Start Cloudflare Tunnel
       run: |
-        sudo apt update && sudo apt install -y wget openssh-server
-        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-        sudo dpkg -i cloudflared-linux-amd64.deb
-        
-    - name: Configure Root Access
-      run: |
-        echo "root:toor123" | sudo chpasswd
-        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-        sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        sudo systemctl restart ssh
-
-    - name: Start Cloudflare Tunnel
-      run: |
-        # This creates a tunnel and prints the random URL to the logs
+        # Start the tunnel in the background
         cloudflared tunnel --url ssh://localhost:22 > cf.log 2>&1 &
-        sleep 10
-        echo "======================================================"
-        echo "           CLOUDFLARE SSH ACCESS                      "
-        echo "======================================================"
-        grep -o 'https://[-a-z0-9.]*trycloudflare.com' cf.log | head -n 1
-        echo "======================================================"
-        echo "PASSWORD: toor123"
-        echo "======================================================"
         
-        # Keep alivee
+        echo "Waiting for Cloudflare to generate your URL..."
+        
+        # Loop to find the URL
+        for i in {1..20}; do
+          sleep 3
+          CF_URL=$(grep -o 'https://[-a-z0-9.]*trycloudflare.com' cf.log | head -n 1)
+          
+          if [ ! -z "$CF_URL" ]; then
+            echo "======================================================"
+            echo "           CLOUDFLARE SSH ACCESS                      "
+            echo "======================================================"
+            echo "URL: $CF_URL"
+            echo "======================================================"
+            echo "PASSWORD: toor123"
+            echo "======================================================"
+            break
+          fi
+          
+          echo "Attempt $i: URL not ready yet..."
+          
+          if [ $i -eq 20 ]; then
+            echo "❌ ERROR: Cloudflare failed to start. Log dump:"
+            cat cf.log
+            exit 1
+          fi
+        done
+        
+        # Keep alive
         while true; do sleep 300; done
