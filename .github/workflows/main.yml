@@ -111,5 +111,5 @@ jobs:
           fi
           
           # Show running message
-          echo "[$(date '+%H:%M:%S')] Session active - Auth key: ${AUTH_KEY:0:20}... (full key above)"
+          # echo "[$(date '+%H:%M:%S')] Session active - Auth key: ${AUTH_KEY:0:20}... (full key above)"
         done
